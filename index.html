@@ -1,0 +1,182 @@
+<html>
+<head>
+<script>
+  //https://gist.github.com/franktopel/5d760330a936e32644660774ccba58a7
+class HTMLBaseElement extends HTMLElement {
+  constructor(...args) {
+    const self = super(...args)
+    self.parsed = false // guard to make it easy to do certain stuff only once
+    self.parentNodes = []
+    return self
+  }
+
+  setup() {
+    // collect the parentNodes
+    let el = this;
+    while (el.parentNode) {
+      el = el.parentNode
+      this.parentNodes.push(el)
+    }
+    // check if the parser has already passed the end tag of the component
+    // in which case this element, or one of its parents, should have a nextSibling
+    // if not (no whitespace at all between tags and no nextElementSiblings either)
+    // resort to DOMContentLoaded or load having triggered
+    if ([this, ...this.parentNodes].some(el=> el.nextSibling) || document.readyState !== 'loading') {
+      this.childrenAvailableCallback();
+    } else {
+      this.mutationObserver = new MutationObserver(() => {
+        if ([this, ...this.parentNodes].some(el=> el.nextSibling) || document.readyState !== 'loading') {
+          this.childrenAvailableCallback()
+          this.mutationObserver.disconnect()
+        }
+      });
+
+      this.mutationObserver.observe(this, {childList: true});
+    }
+  }
+}
+
+class MyMemoryProvider extends HTMLBaseElement {
+  constructor() {
+    super();
+    this._data = [];
+  }
+
+  get observedAttributes() {
+    return ['data'];
+  }
+
+  get data() {
+    return this._data;
+  }
+  set data(data) {
+    this._data = data;
+    if (this.parsed) {
+      this.updateData();
+    }
+  }
+
+  connectedCallback() {
+    super.setup();
+  }
+
+  childrenAvailableCallback() {
+    this.parsed = true;
+    this.updateData();
+  }
+
+  updateData() {
+    [... this.childNodes]
+      .filter(el => el.attributes !== undefined)
+      .forEach(el => el.data = this.data);
+  }
+}
+window.customElements.define('my-memory-provider', MyMemoryProvider);
+
+class MyServiceProvider extends HTMLBaseElement {
+  constructor() {
+    super();
+    this._data = [];
+    fetch('/data.json')
+      .then(resp => resp.json())
+      .then(data => this.data = data);
+  }
+
+  get observedAttributes() {
+    return ['data'];
+  }
+
+  get data() {
+    return this._data;
+  }
+  set data(data) {
+    this._data = data;
+    if (this.parsed) {
+      this.updateData();
+    }
+  }
+
+  connectedCallback() {
+    super.setup();
+  }
+
+  childrenAvailableCallback() {
+    this.parsed = true;
+    this.updateData();
+  }
+
+  updateData() {
+    [... this.childNodes]
+      .filter(el => el.attributes !== undefined)
+      .forEach(el => el.data = this.data);
+  }
+}
+window.customElements.define('my-service-provider', MyServiceProvider);
+
+class MyDataTable extends HTMLElement {
+  constructor() {
+    super();
+    this._data = [];
+  }
+
+  get observedAttributes() {
+    return ['data'];
+  }
+
+  get data() {
+    return this._data;
+  }
+  set data(data) {
+    this._data = data;
+    this.updateTable();
+  }
+
+  updateTable() {
+    let html = '<table>';
+    this.data.forEach(row => {
+      html += '<tr>';
+      row.forEach(col => {
+        html += `<td>${col}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</table>';
+    this.innerHTML = html;
+  }
+}
+window.customElements.define('my-data-table', MyDataTable);
+</script>
+</head>
+<body>
+  <my-memory-provider>
+    <my-data-table>
+    </my-data-table>
+  </my-memory-provider>
+  <button id="data1">
+    Data Set 1
+  </button>
+  <button id="data2">
+    Data Set 2
+  </button>
+  <my-service-provider>
+    <my-data-table>
+    </my-data-table>
+  </my-service-provider>
+</body>
+<script>
+document.getElementById('data1').addEventListener('click', () => {
+  document.querySelector('my-memory-provider').data = [
+    [ 10, 20, 30 ],
+    [ 20, 30, 40 ],
+  ];
+});
+
+document.getElementById('data2').addEventListener('click', () => {
+  document.querySelector('my-memory-provider').data = [
+    [ 100, 200, 300 ],
+    [ 200, 300, 400 ],
+  ];
+});
+</script>
+
+</html>
